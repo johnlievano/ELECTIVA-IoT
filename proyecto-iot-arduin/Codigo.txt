@@ -1,0 +1,72 @@
+#include <DHT.h>
+
+// Pines
+const int PIR = 3;
+const int BUZZER = 16;
+const int LDR = A0;
+const int LEDS_ROJOS[] = {9, 10, 11, 12, 13};
+const int LED_CIAN = 5;
+const int LED_TEMP = 18;   // morado
+const int LED_HUM = 19;    // amarillo
+
+DHT dht(2, DHT22);
+
+unsigned long ultimoMov = 0;
+unsigned long ultimoDHT = 0;
+bool alarma = false;
+
+// Prende fijo si el valor está en rango, parpadea lento si está por debajo
+// y rápido si está por encima
+void indicar(int led, float valor, float minimo, float maximo) {
+  if (valor >= minimo && valor <= maximo) {
+    digitalWrite(led, HIGH);
+    return;
+  }
+  int espera = (valor < minimo) ? 250 : 50;
+  digitalWrite(led, HIGH);
+  delay(espera);
+  digitalWrite(led, LOW);
+  delay(espera);
+}
+
+void setup() {
+  pinMode(PIR, INPUT);
+  pinMode(BUZZER, OUTPUT);
+  pinMode(LED_CIAN, OUTPUT);
+  pinMode(LED_TEMP, OUTPUT);
+  pinMode(LED_HUM, OUTPUT);
+  for (int pin : LEDS_ROJOS) pinMode(pin, OUTPUT);
+  dht.begin();
+}
+
+void loop() {
+  // Más luz = menos LEDs rojos encendidos
+  int cantidad = constrain(map(analogRead(LDR), 0, 1023, 6, 0), 0, 5);
+  for (int i = 0; i < 5; i++) {
+    digitalWrite(LEDS_ROJOS[i], i < cantidad);
+  }
+
+  // Movimiento: LED cian y buzzer, que duran 2 s después de la última detección
+  if (digitalRead(PIR) == HIGH) {
+    ultimoMov = millis();
+    alarma = true;
+  }
+  if (alarma && millis() - ultimoMov >= 2000) alarma = false;
+
+  digitalWrite(LED_CIAN, alarma);
+  if (alarma) tone(BUZZER, 1000);
+  else noTone(BUZZER);
+
+  // Temperatura y humedad cada 2 segundos
+  if (millis() - ultimoDHT >= 2000) {
+    ultimoDHT = millis();
+    float t = dht.readTemperature();
+    float h = dht.readHumidity();
+    if (!isnan(t) && !isnan(h)) {
+      indicar(LED_TEMP, t, 0, 35);
+      indicar(LED_HUM, h, 30, 70);
+    }
+  }
+
+  delay(10);
+}
